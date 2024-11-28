@@ -164,3 +164,25 @@ def compare_availability(user_availability1, user_availability2):
     avail2 = decompress_availability(user_availability2)
     return sum(1 for i in range(len(avail1)) if avail1[i] == '1' and avail2[i] == '1')
 
+
+def preference_comparison(priority_user, priority_buddy):
+    environ_user, location_user, objective_user = priority_user
+    environ_buddy, location_buddy, objective_buddy = priority_buddy
+    
+    score = 0
+    # For each preference:
+    # Match = 1.0
+    # One None = 0.5
+    # Mismatch = 0.0
+    for pref_user, pref_buddy in [(environ_user, environ_buddy), 
+                                 (location_user, location_buddy), 
+                                 (objective_user, objective_buddy)]:
+        if pref_user == pref_buddy and pref_user is not None:
+            score += 1.0
+        elif pref_user is None or pref_buddy is None:
+            score += 0.5
+        
+            
+    return score 
+
+

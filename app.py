@@ -24,7 +24,6 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-
 # generalized response formats
 def success_response(data, code=200):
     return json.dumps(data), code
@@ -55,9 +54,9 @@ def create_user():
     body = json.loads(request.data)
     
     try:
-        name, netid, password, confirm_password = body.get("name"), body.get("netid"), body.get("password"), body.get("confirm_password")
+        name, netid, password, confirm_password = body["name"], body["netid"], body["password"], body["confirm_password"]
     except:
-        return failure_response("Missing fields", 400)
+        return failure_response("Missing Entry Fields", 400)
     
     if password != confirm_password:
         return failure_response("Passwords do not match", 400)
@@ -81,18 +80,22 @@ def login_user():
     body = json.loads(request.data)    
 
     try:
-        netid, password = body.get("netid"), body.get("password")
+        netid, request_password = body["netid"], body["password"]
     except:
-        return failure_response("Missing fields", 400)
+        return failure_response("Missing Entry Fields", 400)
     
     user = User.query.filter_by(netid=netid).first()
+    
     if user is None:
-        return failure_response("Invalid netid", 400)
+        return failure_response("User Not Found: Invalid NetId", 404)
+
+
     # Use check_password_hash to verify the password
-    elif not check_password_hash(user.password, password):
-        return failure_response("Invalid password", 400)
+    elif not check_password_hash(user.password, request_password):
+        return failure_response("Password incorrect", 400)
     
     session["user_id"] = user.id
+    
     return success_response(user.serialize())
 
 
@@ -106,18 +109,18 @@ def upload_file():
     if "file" not in request.files:
         return json.dumps({"error": "No file part in the request"}), 400
     
-    file = request.files["file"]
+    cal_file = request.files["file"]
     
     # Check if the file has a valid name
-    if file.filename == "":
+    if cal_file.filename == "":
         return json.dumps({"error": "No file selected"}), 400
     
     # Save the file temporarily to upload to S3
-    temp_file_path = os.path.join("/tmp", file.filename)
-    file.save(temp_file_path)
+    temp_file_path = os.path.join("/tmp", cal_file.filename)
+    cal_file.save(temp_file_path)
     
     # Define the object name in S3
-    object_name = "user" + session["user_id"] + "/" + file.filename
+    object_name = "user" + session["user_id"] + "/" + cal_file.filename
     
     # Upload to S3
     success = upload_file_to_s3(temp_file_path)
@@ -128,7 +131,7 @@ def upload_file():
     if not success:
         return failure_response("File upload failed"), 500
     else:
-        availability_string = compress_availability(process_calendar_file(file))
+        availability_string = compress_availability(process_calendar_file(cal_file))
         user = User(availability=availability_string)
         db.session.add(user)
         db.session.commit()
@@ -150,10 +153,36 @@ def get_results():
 
 @app.route("/api/user/preferences/", methods=["POST"])
 def update_preferences():
-    """Update user preferences"""
+    """Update user preferences: environment, location, and objective 
+
+        environment: quiet, loud, null/None
+        location: north, south, central, west, null/None
+        objective: review, homework, null/None
+    """
+    
     body = json.loads(request.data)
 
+    try:
+        environ_pref, location_pref, objective_pref = body["environ_preference"], body["location_preference"], body["objective_preference"]
+    except:
+        return failure_response("Missing Entry Fields", 400)
 
+    if environ_pref not in [None, "quiet", "loud"] or location_pref not in [None, "sorth", "south", "central", "west"] or objective_pref not in [None, "review", "homework"]:
+        return failure_response("Dev Error: preferences weren't relayed to backend properly; look at update_preferences documentation", 400)
+    
+    user = User.query.filter_by(id=session["user_id"]).first()
+
+    if user is None:
+        return failure_response("User not found", 404)
+    
+    user.environ_pref = environ_pref
+    user.location_pref = location_pref
+    user.objective_pref = objective_pref
+
+
+    db.session.commit()
+    
+    
 ###########
 @app.route("/api/users/<int:user_id>/")
 def get_user(user_id):
