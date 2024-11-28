@@ -20,7 +20,7 @@ class User(db.Model):
     name = db.Column(db.String, nullable=False)
     netid = db.Column(db.String, nullable=False)
     password = db.Column(db.String(256), nullable=False)
-    availiblity = db.Column(db.String, nullable=True)
+    availability = db.Column(db.String, nullable=True)
     eviroment_preference = db.Column(db.String, nullable=True)
     location_preference = db.Column(db.String, nullable=True)
     objective_preference = db.Column(db.String, nullable=True)
@@ -47,8 +47,9 @@ class User(db.Model):
             "id": self.id,
             "name": self.name,
             "netid": self.netid,
-            #"courses": [c.simple_serialize() for c in self.student_courses] + [c.simple_serialize() for c in self.instructor_courses]
+            "availability": self.availability
         }
+        
 
 class Course(db.Model):
     """

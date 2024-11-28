@@ -163,6 +163,17 @@ def compare_availability(user_availability1, user_availability2):
     avail2 = decompress_availability(user_availability2)
     return sum(1 for i in range(len(avail1)) if avail1[i] == '1' and avail2[i] == '1')
 
+def constructor_availability(user_unavailability_blocks):
+    """
+    Create a compressed availability string from a list of unavailability blocks
+    """
+    availability_string = ['1'] * (32 * 7)
+    for block in user_unavailability_blocks:
+        start_block = time_to_block_index(block[0])
+        end_block = time_to_block_index(block[1])
+        for block in range(start_block, end_block):
+            availability_string[block] = '0'
+    return compress_availability(''.join(availability_string))
 
 def preference_comparison(priority_user, priority_buddy):
     environ_user, location_user, objective_user = priority_user

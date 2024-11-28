@@ -4,10 +4,18 @@ from flask import Flask, request, session
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from schedule_data import process_calendar_file, compress_availability, decompress_availability
+from icalendar import Calendar
+from dotenv import load_dotenv
+from schedule_data import constructor_availability
+
+load_dotenv()
+
+
 
 # define db filename
 db_filename = "data.db"
 app = Flask(__name__)
+print(os.getenv("FLASK_SECRET_KEY"))
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
@@ -116,15 +124,68 @@ def upload_file():
     if cal_file.filename == "":
         return json.dumps({"error": "No file selected"}), 400
     
-    # Save the file temporarily to upload to S3
     temp_file_path = os.path.join("/tmp", cal_file.filename)
     cal_file.save(temp_file_path)
+    
+    # Open the .ics file in binary mode
+    with open(temp_file_path, 'rb') as f:
+        cal = Calendar.from_ical(f.read())
+        
+    user_course_set = set()
+    user_unavailability_blocks = []
+
+    # Iterate through calendar components
+    for component in cal.walk():
+        if component.name == "VEVENT":
+            
+            period = component.get('summary')
+            dtstart = component.get('dtstart').dt
+            dtend = component.get('dtend').dt
+            
+            user_course_set.add(period.split(",")[0])
+            user_unavailability_blocks.append((dtstart, dtend))
+
+    
+    #print(user_course_set)
+    #print(constructor_availability(user_unavailablity_blocks))
+    
+    for course_name in user_course_set:
+        # Find or create the course
+        # Note: Course requires both code and name
+        course = Course.query.filter_by(name=course_name).first()
+        if course is None:
+            course = Course(
+                code=course_name,  # You might want to parse this differently
+                name=course_name
+            )
+            db.session.add(course)
+        
+        # Get current user
+        user = User.query.filter_by(id=session["user_id"]).first()
+        
+        # Add user as student if not already in course
+        if user not in course.students:
+            course.students.append(user)
+            # The reciprocal relationship will be automatically handled
+            # because we defined back_populates in the models
+    
+    user.availability = constructor_availability(user_unavailability_blocks)
+    
+    db.session.commit()
+    return success_response({"message": "Calendar processed successfully"})
+    # Save the file temporarily to upload to S3
+    """
+    
+    temp_file_path = os.path.join("/tmp", cal_file.filename)
+    cal_file.save(temp_file_path)
+    
     
     # Define the object name in S3
     object_name = "user" + session["user_id"] + "/" + cal_file.filename
     
     # Upload to S3
     success = upload_file_to_s3(temp_file_path)
+    
     
     # Clean up the temporary file
     os.remove(temp_file_path)
@@ -137,6 +198,7 @@ def upload_file():
         db.session.add(user)
         db.session.commit()
         return success_response({"message": "File uploaded successfully", "s3_key": object_name, "compressed_string": compressed_string}, 200)
+    """
 
 
 @app.route("/api/results/", methods=["GET"])
@@ -185,13 +247,34 @@ def update_preferences():
     
     
 ###########
-@app.route("/api/users/<int:user_id>/")
-def get_user(user_id):
+@app.route("/api/users/<string:netid>/")
+def get_user(netid):
     """Get a specific user"""
-    user = User.query.filter_by(id=user_id).first()
+    print(netid)
+    user = User.query.filter_by(netid=netid).first()
     if user is None:
         return failure_response("User not found")
     return success_response(user.serialize())
+
+
+@app.route("/api/users/<string:netid>/courses/")
+def get_courses_of_user(netid):
+    """Get all courses that a user is enrolled in"""
+    # Find the user
+    user = User.query.filter_by(netid=netid).first()
+    if user is None:
+        return failure_response("User not found")
+    
+    # Get their courses through the student_courses relationship
+    courses = [course.simple_serialize() for course in user.student_courses]
+    
+    return success_response({
+        "courses": courses,
+        "user": user.simple_serialize()
+    })
+    
+
+    
 
 @app.route("/api/courses/<int:course_id>/add/", methods=["POST"])
 def add_user_to_course(course_id):
