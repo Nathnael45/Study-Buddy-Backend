@@ -1,21 +1,16 @@
-import json
-from db import db, Course, User, Assignment
+import json, os, boto3
+from db import db, Course, User
 from flask import Flask, request, session
 from datetime import datetime
-import os
-import boto3
 from werkzeug.security import generate_password_hash, check_password_hash
 from schedule_data import process_calendar_file, compress_availability, decompress_availability
 
 # define db filename
-db_filename = "todo.db"
+db_filename = "data.db"
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}"
-    f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
-)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///data.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = True
 
@@ -54,10 +49,14 @@ def create_user():
     """Create a new user"""
     body = json.loads(request.data)
     
-    try:
-        name, netid, password, confirm_password = body.get("name"), body.get("netid"), body.get("password"), body.get("confirm_password")
-    except:
-        return failure_response("Missing fields", 400)
+    # Check if required fields exist
+    if not body.get("name") or not body.get("netid") or not body.get("password") or not body.get("confirm_password"):
+        return failure_response("Missing required fields", 400)
+    
+    name = body.get("name")
+    netid = body.get("netid")
+    password = body.get("password")
+    confirm_password = body.get("confirm_password")
     
     if password != confirm_password:
         return failure_response("Passwords do not match", 400)
@@ -68,7 +67,14 @@ def create_user():
     
     # Hash the password before storing
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-    new_user = User(name=name, netid=netid, password=hashed_password)
+    
+    # Create new user with keyword arguments
+    new_user = User(
+        name=name,
+        netid=netid,
+        password=hashed_password
+    )
+    
     db.session.add(new_user)
     db.session.commit()
 
@@ -87,13 +93,13 @@ def login_user():
     
     user = User.query.filter_by(netid=netid).first()
     if user is None:
-        return failure_response("Invalid netid", 400)
+        return failure_response("Netid not found", 400)
     # Use check_password_hash to verify the password
     elif not check_password_hash(user.password, password):
-        return failure_response("Invalid password", 400)
+        return failure_response("Incorrect password", 400)
     
     session["user_id"] = user.id
-    return success_response(user.serialize())
+    return success_response("Successfully logged in", 200)
 
 
 @app.route("/api/upload/", methods=["POST"])
