@@ -3,7 +3,6 @@ from datetime import datetime, time
 from dateutil.rrule import rrulestr
 import pytz
 import boto3
-from app import app
 from flask import session
 
 S3_BUCKET = "schedule-data-bucket"
