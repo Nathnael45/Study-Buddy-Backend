@@ -28,16 +28,10 @@ class User(db.Model):
 
     def __init__(self, **kwargs):
         """Initialize a User object"""
-<<<<<<< HEAD
-        self.name = kwargs["name"]
-        self.netid = kwargs["netid"]
-        self.password = kwargs["password"]
-=======
         self.name = kwargs.get('name',"")
         self.netid = kwargs.get('netid',"")
         self.password = kwargs.get('password',"")
     
->>>>>>> origin/main
 
     def simple_serialize(self):
         """Serialize a User object without courses"""
