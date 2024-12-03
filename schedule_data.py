@@ -45,12 +45,12 @@ def time_to_block_index(dt):
     return max(0, min(31, minutes_since_8am // 30))  # Ensure index is between 0 and 31
 
 def process_calendar_file(calendar_file):
-
     """
     Process an ICS calendar file and return a weekly availability string.
     Marks entire blocks as busy if any part of an event falls within that block.
+    Only includes Monday-Friday.
     """
-    week_availability = ['1'] * (32 * 7)  # 224 total blocks
+    week_availability = ['1'] * (32 * 5)  # 160 total blocks (5 days * 32 blocks)
     cal = Calendar.from_ical(calendar_file.read())
 
     # Process calendar events
@@ -75,19 +75,21 @@ def process_calendar_file(calendar_file):
             # Handle single events (no RRULE)
             if not component.get('rrule'):
                 weekday = dtstart.weekday()
-                for block in range(start_block, end_block):
-                    week_availability[weekday * 32 + block] = '0'
+                if weekday < 5:  # Only process Monday-Friday
+                    for block in range(start_block, end_block):
+                        week_availability[weekday * 32 + block] = '0'
             else:
                 # Handle recurring events
                 rrule = component.get('rrule')
                 byday = rrule.get('byday', [])
-                day_mapping = {'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4, 'SA': 5, 'SU': 6}
+                day_mapping = {'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4}  # Removed SA and SU
                 
                 # Mark blocks as unavailable for each day this event occurs
                 for day in byday:
-                    weekday = day_mapping[day]
-                    for block in range(start_block, end_block):
-                        week_availability[weekday * 32 + block] = '0'
+                    if day in day_mapping:  # Only process weekdays
+                        weekday = day_mapping[day]
+                        for block in range(start_block, end_block):
+                            week_availability[weekday * 32 + block] = '0'
     
     return ''.join(week_availability)
 
@@ -167,7 +169,7 @@ def constructor_availability(user_unavailability_blocks):
     """
     Create a compressed availability string from a list of unavailability blocks
     """
-    availability_string = ['1'] * (32 * 7)
+    availability_string = ['1'] * (32 * 5)  # Changed to 5 days
     for block in user_unavailability_blocks:
         start_block = time_to_block_index(block[0])
         end_block = time_to_block_index(block[1])
