@@ -431,6 +431,32 @@ def search_results():
         "matches": matches
     })
 
+@app.route("/api/preferences/")
+def get_current_preferences():
+    """Get the current user's preferences"""
+    if "user_id" not in session:
+        return failure_response("Not logged in", 401)
+    
+    user = User.query.get(session["user_id"])
+    if user is None:
+        return failure_response("User not found", 404)
+    
+    preferences = {
+            "north": user.location_north,
+            "south": user.location_south,
+            "central": user.location_central,
+            "west": user.location_west,
+            "morning": user.time_morning,
+            "afternoon": user.time_afternoon,
+            "evening": user.time_evening,
+            "study": user.objective_study,
+            "homework": user.objective_homework,
+    }
+    
+    return success_response(preferences)
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
 
