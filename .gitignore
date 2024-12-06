@@ -2,5 +2,6 @@
 /src/__pycache__/
 *.pyc
 .aws
-.venv/
-/src/instance
+.venv
+instance
+venv
