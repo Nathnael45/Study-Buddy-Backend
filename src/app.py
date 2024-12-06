@@ -313,13 +313,16 @@ def send_match_email():
     body = json.loads(request.data)
     
     try:
-        r_netid, s_netid = session["user_id"], body["sender_netid"]
+        s_netid = body["sender_netid"]
     except:
         return failure_response("Missing netid fields", 400)
     
     # Get user objects
-    user1 = User.query.filter_by(netid=r_netid).first()
+    user1 = User.query.filter_by(id=session["user_id"]).first()
     user2 = User.query.filter_by(netid=s_netid).first()
+    
+    if user1 is None or user2 is None:
+        return failure_response("One or both users not found", 404)
     
     common_prefs = get_common_preferences(user1.id, user2.id)
     
