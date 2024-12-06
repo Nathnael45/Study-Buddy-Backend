@@ -373,7 +373,7 @@ def send_match_email():
         except Exception as e:
             return failure_response(f"Failed to send email: {str(e)}", 500)
     
-    return success_response({"message": "Emails sent successfully"})
+    return success_response("Emails sent successfully")
 
 @app.route("/api/search/")
 def search_results():
