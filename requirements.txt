@@ -15,3 +15,4 @@ boto3==1.35.70
 mysqlclient==2.2.6
 pymysql==1.1.1
 python-dotenv==1.0.1
+icalendar==4.0.9
