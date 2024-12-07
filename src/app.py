@@ -458,6 +458,11 @@ def get_current_preferences():
     
     return success_response(preferences)
 
+@app.route("/api/users")
+def get_all_users():
+    """Get all users"""
+    users = User.query.all()
+    return success_response([user.serialize() for user in users])   
 
 
 if __name__ == "__main__":
