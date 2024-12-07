@@ -462,7 +462,11 @@ def get_current_preferences():
 def get_all_users():
     """Get all users"""
     users = User.query.all()
-    return success_response([user.serialize() for user in users])   
+    return success_response([user.serialize() for user in users])
+
+@app.route("/api")
+def greet():
+    return success_response({"message": "Hello, welcome to the study buddy app!"})
 
 
 if __name__ == "__main__":
