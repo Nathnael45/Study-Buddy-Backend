@@ -1,7 +1,7 @@
 version: "3"
 
 services:
-  Stumble:
-    image: sdhadlock/Stumble:v1.0.0
+  study-buddy-app:
+    image: sdhadlock/study-buddy-app:v1.0.0
     ports:
       - "8000:8000" # map port 8000 of the container to port 8000 on the host
