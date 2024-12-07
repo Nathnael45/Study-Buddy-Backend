@@ -1,42 +1,10 @@
 from icalendar import Calendar
 from datetime import datetime, time
-from dateutil.rrule import rrulestr
-import pytz
-import boto3
-from flask import session
-
-S3_BUCKET = "schedule-data-bucket"
-
-def read_file_from_s3(bucket_name):
-    """Read file contents directly from S3.
-    
-    Args:
-        bucket_name (str): Name of the S3 bucket
-        
-    Returns:
-        dict: S3 object containing the file data
-        None: If file not found or error occurs
-    """
-    if not session.get('user_id'):
-        return None
-        
-    s3 = boto3.client("s3")
-    key = f"user {session['user_id']} schedule"
-    
-    try:
-        return s3.get_object(Bucket=bucket_name, Key=key)
-    except boto3.exceptions.ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'NoSuchKey':
-            print(f"No schedule found for user {session['user_id']}")
-        elif error_code == 'NoSuchBucket':
-            print(f"Bucket {bucket_name} does not exist")
-        else:
-            print(f"AWS Error: {e}")
-        return None
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return None
+from db import User
+#from dateutil.rrule import rrulestr
+#import pytz
+#import boto3
+#from flask import session
 
 def time_to_block_index(dt):
     """Convert a datetime to block index (0-31)"""
@@ -45,12 +13,12 @@ def time_to_block_index(dt):
     return max(0, min(31, minutes_since_8am // 30))  # Ensure index is between 0 and 31
 
 def process_calendar_file(calendar_file):
+
     """
     Process an ICS calendar file and return a weekly availability string.
     Marks entire blocks as busy if any part of an event falls within that block.
-    Only includes Monday-Friday.
     """
-    week_availability = ['1'] * (32 * 5)  # 160 total blocks (5 days * 32 blocks)
+    week_availability = ['1'] * (32 * 7)  # 224 total blocks
     cal = Calendar.from_ical(calendar_file.read())
 
     # Process calendar events
@@ -75,21 +43,19 @@ def process_calendar_file(calendar_file):
             # Handle single events (no RRULE)
             if not component.get('rrule'):
                 weekday = dtstart.weekday()
-                if weekday < 5:  # Only process Monday-Friday
-                    for block in range(start_block, end_block):
-                        week_availability[weekday * 32 + block] = '0'
+                for block in range(start_block, end_block):
+                    week_availability[weekday * 32 + block] = '0'
             else:
                 # Handle recurring events
                 rrule = component.get('rrule')
                 byday = rrule.get('byday', [])
-                day_mapping = {'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4}  # Removed SA and SU
+                day_mapping = {'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4, 'SA': 5, 'SU': 6}
                 
                 # Mark blocks as unavailable for each day this event occurs
                 for day in byday:
-                    if day in day_mapping:  # Only process weekdays
-                        weekday = day_mapping[day]
-                        for block in range(start_block, end_block):
-                            week_availability[weekday * 32 + block] = '0'
+                    weekday = day_mapping[day]
+                    for block in range(start_block, end_block):
+                        week_availability[weekday * 32 + block] = '0'
     
     return ''.join(week_availability)
 
@@ -169,7 +135,7 @@ def constructor_availability(user_unavailability_blocks):
     """
     Create a compressed availability string from a list of unavailability blocks
     """
-    availability_string = ['1'] * (32 * 5)  # Changed to 5 days
+    availability_string = ['1'] * (32 * 7)
     for block in user_unavailability_blocks:
         start_block = time_to_block_index(block[0])
         end_block = time_to_block_index(block[1])
@@ -177,24 +143,83 @@ def constructor_availability(user_unavailability_blocks):
             availability_string[block] = '0'
     return compress_availability(''.join(availability_string))
 
-def preference_comparison(priority_user, priority_buddy):
-    environ_user, location_user, objective_user = priority_user
-    environ_buddy, location_buddy, objective_buddy = priority_buddy
+def percentage_availability_match(compressed_availability1, compressed_availability2):
+    """
+    Compare two compressed availability strings and return a percentage match score.
+    """
     
-    score = 0
-    # For each preference:
-    # Match = 1.0
-    # One None = 0.5
-    # Mismatch = 0.0
-    for pref_user, pref_buddy in [(environ_user, environ_buddy), 
-                                 (location_user, location_buddy), 
-                                 (objective_user, objective_buddy)]:
-        if pref_user == pref_buddy and pref_user is not None:
-            score += 1.0
-        elif pref_user is None or pref_buddy is None:
-            score += 0.5
+    availability1 = decompress_availability(compressed_availability1)
+    availability2 = decompress_availability(compressed_availability2)
+    
+    return sum(1 for i in range(len(availability1)) if availability1[i] == '1' and availability2[i] == '1') / len(availability1)
+
+def preference_comparison(user1, user2):
+    """
+    Compare preferences between two users and return a percentage match score.
+    Weighs availability (40%), location (25%), time (25%), and objective (10%).
+    
+    Args:
+        user1: User object for first user
+        user2: User object for second user
         
-            
-    return score 
+    Returns:
+        float: Percentage match score (0-100)
+    """
+    # Calculate availability match (40% weight)
+    if user1.availability and user2.availability:
+        availability_score = percentage_availability_match(user1.availability, user2.availability)
+    else:
+        availability_score = 0
+    
+    # Calculate location preference match (25% weight)
+    location_matches = sum([
+        user1.location_north and user2.location_north,
+        user1.location_south and user2.location_south,
+        user1.location_central and user2.location_central,
+        user1.location_west and user2.location_west
+    ])
+    location_total = sum([
+        user1.location_north or user2.location_north,
+        user1.location_south or user2.location_south,
+        user1.location_central or user2.location_central,
+        user1.location_west or user2.location_west
+    ])
+    location_score = location_matches / location_total if location_total > 0 else 0
+    
+    # Calculate time preference match (25% weight)
+    time_matches = sum([
+        user1.time_morning and user2.time_morning,
+        user1.time_afternoon and user2.time_afternoon,
+        user1.time_evening and user2.time_evening
+    ])
+    time_total = sum([
+        user1.time_morning or user2.time_morning,
+        user1.time_afternoon or user2.time_afternoon,
+        user1.time_evening or user2.time_evening
+    ])
+    time_score = time_matches / time_total if time_total > 0 else 0
+    
+    # Calculate objective preference match (10% weight)
+    obj_matches = sum([
+        user1.objective_study and user2.objective_study,
+        user1.objective_homework and user2.objective_homework
+    ])
+    obj_total = sum([
+        user1.objective_study or user2.objective_study,
+        user1.objective_homework or user2.objective_homework
+    ])
+    obj_score = obj_matches / obj_total if obj_total > 0 else 0
+    
+    # Calculate weighted score
+    # Availability: 40%, Location: 25%, Time: 25%, Objective: 10%
+    final_score = (
+        (availability_score * 0.4) +
+        (location_score * 0.25) +
+        (time_score * 0.25) +
+        (obj_score * 0.1)
+    ) * 100
+    
+    return round(final_score)
 
 
+    

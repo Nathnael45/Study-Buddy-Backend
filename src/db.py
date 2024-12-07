@@ -21,16 +21,26 @@ class User(db.Model):
     netid = db.Column(db.String, nullable=False)
     password = db.Column(db.String(256), nullable=False)
     availability = db.Column(db.String, nullable=True)
-    eviroment_preference = db.Column(db.String, nullable=True)
-    location_preference = db.Column(db.String, nullable=True)
-    objective_preference = db.Column(db.String, nullable=True)
+    
+    # Set default=False for all preference columns
+    location_north = db.Column(db.Boolean, nullable=False, default=False)
+    location_south = db.Column(db.Boolean, nullable=False, default=False)
+    location_central = db.Column(db.Boolean, nullable=False, default=False)
+    location_west = db.Column(db.Boolean, nullable=False, default=False)
+    time_morning = db.Column(db.Boolean, nullable=False, default=False)
+    time_afternoon = db.Column(db.Boolean, nullable=False, default=False)
+    time_evening = db.Column(db.Boolean, nullable=False, default=False)
+    objective_study = db.Column(db.Boolean, nullable=False, default=False)
+    objective_homework = db.Column(db.Boolean, nullable=False, default=False)
+    
     student_courses = db.relationship("Course", secondary=course_students_table, back_populates="students")
 
     def __init__(self, **kwargs):
         """Initialize a User object"""
-        self.name = kwargs.get('name',"")
-        self.netid = kwargs.get('netid',"")
-        self.password = kwargs.get('password',"")
+        self.name = kwargs.get('name', "")
+        self.netid = kwargs.get('netid', "")
+        self.password = kwargs.get('password', "")
+        
     
 
     def simple_serialize(self):
@@ -49,7 +59,16 @@ class User(db.Model):
             "netid": self.netid,
             "availability": self.availability
         }
-        
+    
+    def serialize_with_preferences(self):
+        """Serialize a User object with preferences"""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "netid": self.netid,
+            "availability": self.availability,
+            "preferences": self.preferences
+        }
 
 class Course(db.Model):
     """
