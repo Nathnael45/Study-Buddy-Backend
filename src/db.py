@@ -13,7 +13,7 @@ course_students_table = db.Table(
 
 class User(db.Model):
     """
-    User model
+    User model d
     """
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
